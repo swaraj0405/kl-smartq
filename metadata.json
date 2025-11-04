@@ -1,0 +1,7 @@
+{
+  "name": "KL SmartQ",
+  "description": "A modern, web-based queue management system for the KL University environment. It replaces physical queues with a streamlined, digital token system, allowing students to book a virtual spot in line and staff to manage student flow efficiently.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
