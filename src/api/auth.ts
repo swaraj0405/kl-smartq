@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 // Auth API helper copied into kl-smartq frontend
-const API_BASE = 'http://localhost:8083/api';
+const API_BASE = 'https://kl-smartq.onrender.com/api';
 
 async function post(path: string, body: any, includeCredentials = false) {
   const url = `${API_BASE}${path}`;

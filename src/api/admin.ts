@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:8083/api';
+const API_BASE = 'https://kl-smartq.onrender.com/api';
 
 function getToken(): string | null {
   if (typeof window === 'undefined') {
