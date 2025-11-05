@@ -41,12 +41,15 @@ public class SupabaseAuthService {
      */
     public void registerStudent(String name, String email, String password) {
         try {
-            // Prepare signup request with email OTP
+            // First, create a temporary user record in our database
+            // We'll get the actual Supabase ID after OTP verification
+            
+            // Prepare signup request
             Map<String, Object> signUpData = new HashMap<>();
             signUpData.put("email", email);
             signUpData.put("password", password);
             
-            // Add user metadata (name will be stored in profile)
+            // Add user metadata
             Map<String, Object> userMetadata = new HashMap<>();
             userMetadata.put("name", name);
             signUpData.put("user_metadata", userMetadata);
@@ -58,7 +61,7 @@ public class SupabaseAuthService {
                 MediaType.parse("application/json")
             );
 
-            // Call Supabase Auth API - this will send OTP email
+            // Call Supabase Auth API
             Request request = new Request.Builder()
                     .url(supabaseConfig.getSupabaseUrl() + "/auth/v1/signup")
                     .addHeader("apikey", supabaseConfig.getSupabaseAnonKey())
@@ -73,31 +76,37 @@ public class SupabaseAuthService {
                 }
 
                 String responseBody = response.body().string();
+                System.out.println("Supabase signup response: " + responseBody);
+                
                 @SuppressWarnings("unchecked")
                 Map<String, Object> responseData = objectMapper.readValue(responseBody, Map.class);
                 
+                // When email confirmation is required, Supabase may not return user data immediately
+                // The user will be created after OTP verification
                 @SuppressWarnings("unchecked")
                 Map<String, Object> userData = (Map<String, Object>) responseData.get("user");
                 
-                if (userData == null || userData.get("id") == null) {
-                    System.err.println("Supabase response: " + responseBody);
-                    throw new IllegalStateException("Failed to create user - no user ID returned");
+                if (userData != null && userData.get("id") != null) {
+                    String supabaseUserId = (String) userData.get("id");
+
+                    // Create profile in our database
+                    User user = new User();
+                    user.setId(supabaseUserId);
+                    user.setName(name);
+                    user.setEmail(email.toLowerCase());
+                    user.setRole("STUDENT");
+                    user.setEmailVerified(false);
+                    user.setPasswordHash("");
+                    userRepository.save(user);
+                    
+                    System.out.println("✓ Student registered: " + email + " (Supabase ID: " + supabaseUserId + ")");
+                } else {
+                    // User will be created in database after OTP verification
+                    // Store temporary registration data
+                    System.out.println("✓ Registration initiated for: " + email + " (awaiting email confirmation)");
                 }
                 
-                String supabaseUserId = (String) userData.get("id");
-
-                // Create profile in our database
-                User user = new User();
-                user.setId(supabaseUserId);
-                user.setName(name);
-                user.setEmail(email.toLowerCase());
-                user.setRole("STUDENT");
-                user.setEmailVerified(false);
-                user.setPasswordHash("");
-                userRepository.save(user);
-
-                System.out.println("✓ Student registered: " + email + " (Supabase ID: " + supabaseUserId + ")");
-                System.out.println("✓ OTP verification email sent by Supabase");
+                System.out.println("✓ Verification email sent by Supabase");
             }
 
         } catch (IOException e) {
@@ -114,7 +123,7 @@ public class SupabaseAuthService {
             Map<String, Object> verifyData = new HashMap<>();
             verifyData.put("email", email);
             verifyData.put("token", token);
-            verifyData.put("type", "signup"); // or "email_change", "recovery"
+            verifyData.put("type", "signup");
 
             String json = objectMapper.writeValueAsString(verifyData);
             
@@ -133,10 +142,13 @@ public class SupabaseAuthService {
             try (Response response = httpClient.newCall(request).execute()) {
                 if (!response.isSuccessful()) {
                     String errorBody = response.body() != null ? response.body().string() : "Invalid code";
-                    throw new IllegalArgumentException("OTP verification failed: " + errorBody);
+                    System.err.println("OTP verification failed: " + errorBody);
+                    throw new IllegalArgumentException("Invalid or expired OTP code");
                 }
 
                 String responseBody = response.body().string();
+                System.out.println("OTP verification response: " + responseBody);
+                
                 @SuppressWarnings("unchecked")
                 Map<String, Object> responseData = objectMapper.readValue(responseBody, Map.class);
                 
@@ -146,11 +158,31 @@ public class SupabaseAuthService {
                 if (userData != null && userData.get("id") != null) {
                     String userId = (String) userData.get("id");
                     
-                    // Update email verification status in database
-                    userRepository.findById(userId).ifPresent(user -> {
+                    // Check if user profile already exists
+                    if (!userRepository.existsById(userId)) {
+                        // Get name from user metadata
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> userMetadata = (Map<String, Object>) userData.get("user_metadata");
+                        String name = userMetadata != null ? (String) userMetadata.get("name") : "Student";
+                        
+                        // Create user profile now that email is verified
+                        User user = new User();
+                        user.setId(userId);
+                        user.setName(name);
+                        user.setEmail(email.toLowerCase());
+                        user.setRole("STUDENT");
                         user.setEmailVerified(true);
+                        user.setPasswordHash("");
                         userRepository.save(user);
-                    });
+                        
+                        System.out.println("✓ User profile created for: " + email + " (ID: " + userId + ")");
+                    } else {
+                        // Update email verification status
+                        userRepository.findById(userId).ifPresent(user -> {
+                            user.setEmailVerified(true);
+                            userRepository.save(user);
+                        });
+                    }
                     
                     System.out.println("✓ OTP verified for: " + email);
                 }
