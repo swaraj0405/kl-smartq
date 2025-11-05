@@ -4,15 +4,15 @@ FROM maven:3.9-eclipse-temurin-17-alpine AS build
 # Set working directory
 WORKDIR /app
 
-# Copy pom.xml and download dependencies
+# Copy pom.xml and download dependencies (including SendGrid SDK)
 COPY pom.xml .
 RUN mvn dependency:go-offline -B
 
 # Copy source code
 COPY src ./src
 
-# Build the application
-RUN mvn clean package -DskipTests
+# Build the application with all dependencies
+RUN mvn clean package -DskipTests -U
 
 # Use smaller JRE image for runtime
 FROM eclipse-temurin:17-jre-alpine
