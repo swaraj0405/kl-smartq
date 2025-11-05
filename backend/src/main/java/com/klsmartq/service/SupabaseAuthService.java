@@ -120,10 +120,11 @@ public class SupabaseAuthService {
      */
     public void verifyOtp(String email, String token) {
         try {
+            // Supabase expects the OTP in a specific format
             Map<String, Object> verifyData = new HashMap<>();
             verifyData.put("email", email);
             verifyData.put("token", token);
-            verifyData.put("type", "signup");
+            verifyData.put("type", "email"); // Changed from "signup" to "email" for OTP verification
 
             String json = objectMapper.writeValueAsString(verifyData);
             
@@ -140,14 +141,15 @@ public class SupabaseAuthService {
                     .build();
 
             try (Response response = httpClient.newCall(request).execute()) {
+                String responseBody = response.body() != null ? response.body().string() : "";
+                
+                System.out.println("OTP verification status: " + response.code());
+                System.out.println("OTP verification response: " + responseBody);
+                
                 if (!response.isSuccessful()) {
-                    String errorBody = response.body() != null ? response.body().string() : "Invalid code";
-                    System.err.println("OTP verification failed: " + errorBody);
+                    System.err.println("OTP verification failed with status " + response.code() + ": " + responseBody);
                     throw new IllegalArgumentException("Invalid or expired OTP code");
                 }
-
-                String responseBody = response.body().string();
-                System.out.println("OTP verification response: " + responseBody);
                 
                 @SuppressWarnings("unchecked")
                 Map<String, Object> responseData = objectMapper.readValue(responseBody, Map.class);
@@ -184,7 +186,7 @@ public class SupabaseAuthService {
                         });
                     }
                     
-                    System.out.println("✓ OTP verified for: " + email);
+                    System.out.println("✓ OTP verified successfully for: " + email);
                 }
             }
 
