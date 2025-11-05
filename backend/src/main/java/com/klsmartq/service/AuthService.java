@@ -10,8 +10,6 @@ import com.klsmartq.util.JsonUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -24,7 +22,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final TempRegistrationRepository tempRepo;
-    private final JavaMailSender mailSender;
+    private final EmailService emailService;
 
     @Value("${jwt.secret:dev-secret-kl-smartq}")
     private String jwtSecret;
@@ -35,10 +33,10 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
 
-    public AuthService(UserRepository userRepository, TempRegistrationRepository tempRepo, JavaMailSender mailSender, PasswordEncoder passwordEncoder, JwtUtil jwtUtil) {
+    public AuthService(UserRepository userRepository, TempRegistrationRepository tempRepo, EmailService emailService, PasswordEncoder passwordEncoder, JwtUtil jwtUtil) {
         this.userRepository = userRepository;
         this.tempRepo = tempRepo;
-        this.mailSender = mailSender;
+        this.emailService = emailService;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
     }
@@ -66,19 +64,8 @@ public class AuthService {
         temp.setCode(code); temp.setExpiresAt(expires); temp.setVerified(false);
         tempRepo.save(temp);
 
-        // send email
-        try {
-            SimpleMailMessage msg = new SimpleMailMessage();
-            msg.setTo(email);
-            msg.setFrom("no-reply@kl-smartq.local");
-            msg.setSubject("KL SmartQ - Verification Code");
-            msg.setText("Your verification code is: " + code + "\n\nThis code will expire in 10 minutes.\n\nIf you didn't request this code, please ignore this email.");
-            mailSender.send(msg);
-            System.out.println("✓ Verification code sent to " + email + ": " + code);
-        } catch (Exception e) {
-            System.err.println("✗ Failed to send email to " + email + ": " + e.getMessage());
-            throw new IllegalStateException("Failed to send verification email: " + e.getMessage());
-        }
+        // Send email using SendGrid HTTP API (works on Render)
+        emailService.sendVerificationCode(email, code);
     }    public void verifyCode(String email, String code) {
         TempRegistration temp = tempRepo.findById(email.toLowerCase()).orElseThrow(() -> new IllegalStateException("No pending registration"));
         if (temp.isVerified()) return;
