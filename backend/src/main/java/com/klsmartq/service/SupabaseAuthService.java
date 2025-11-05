@@ -96,6 +96,8 @@ public class SupabaseAuthService {
                 user.setRole("STUDENT");
                 user.setEmailVerified(false); // Will be true after OTP verification
                 user.setPasswordHash("");
+                user.setAssignedOfficeIds(null); // JSON field must be null, not empty string
+                user.setBadges(null); // JSON field must be null, not empty string
                 
                 userRepository.save(user);
                 System.out.println("✓ User created: " + email + " (ID: " + userId + ")");
@@ -194,6 +196,8 @@ public class SupabaseAuthService {
                         user.setRole("STUDENT");
                         user.setEmailVerified(true);
                         user.setPasswordHash("");
+                        user.setAssignedOfficeIds(null); // JSON field must be null
+                        user.setBadges(null); // JSON field must be null
                         userRepository.save(user);
                         
                         System.out.println("✓ User profile created for: " + email + " (ID: " + userId + ")");
@@ -284,6 +288,8 @@ public class SupabaseAuthService {
                     newUser.setRole("STUDENT");
                     newUser.setEmailVerified(true);
                     newUser.setPasswordHash("");
+                    newUser.setAssignedOfficeIds(null); // JSON field must be null
+                    newUser.setBadges(null); // JSON field must be null
                     
                     return userRepository.save(newUser);
                 });
@@ -372,6 +378,8 @@ public class SupabaseAuthService {
                 user.setRole(role); // STAFF or ADMIN
                 user.setEmailVerified(true);
                 user.setPasswordHash(""); // Managed by Supabase
+                user.setAssignedOfficeIds(null); // JSON field must be null
+                user.setBadges(null); // JSON field must be null
                 userRepository.save(user);
 
                 System.out.println("✓ Staff/Admin user created: " + email + " (Role: " + role + ")");
