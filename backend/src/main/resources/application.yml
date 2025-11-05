@@ -48,8 +48,8 @@ sendgrid:
 
 supabase:
   url: ${SUPABASE_URL:https://xnmwuyrmhwydunpnxzom.supabase.co}
-  key: ${SUPABASE_ANON_KEY:}
-  service-role-key: ${SUPABASE_SERVICE_ROLE_KEY:}
+  anon-key: ${SUPABASE_ANON_KEY:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhubXd1eXJtaHd5ZHVucG54em9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIxNzEwNTgsImV4cCI6MjA3Nzc0NzA1OH0.pQY9luQKX2Xcb18SNpOezuawwjPgCNOwpjr6KzcN3JM}
+  service-role-key: ${SUPABASE_SERVICE_ROLE_KEY:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhubXd1eXJtaHd5ZHVucG54em9tIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MjE3MTA1OCwiZXhwIjoyMDc3NzQ3MDU4fQ.oRxmutt6EQ0QMBU3Nt6RolkdIZozn8LFPxlCW0xSH6Q}
 
 cors:
   allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:5173,http://localhost:8082}
