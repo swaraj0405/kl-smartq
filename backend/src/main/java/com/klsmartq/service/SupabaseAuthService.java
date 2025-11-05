@@ -37,17 +37,15 @@ public class SupabaseAuthService {
     }
 
     /**
-     * Student self-registration: creates Supabase auth user then sends OTP separately
-     * Step 1: Create user with auto-confirm using admin API
-     * Step 2: Send OTP code via /auth/v1/otp endpoint
+     * Student self-registration: creates Supabase auth user
+     * Uses regular signup - email confirmation will be disabled in Supabase settings
      */
     public void registerStudent(String name, String email, String password) {
         try {
-            // Step 1: Create user with auto-confirm (using service role key)
+            // Simple signup request
             Map<String, Object> signupData = new HashMap<>();
             signupData.put("email", email);
             signupData.put("password", password);
-            signupData.put("email_confirm", true); // Auto-confirm the email
             
             // Store name in user metadata
             Map<String, Object> metadata = new HashMap<>();
@@ -61,22 +59,20 @@ public class SupabaseAuthService {
                 MediaType.parse("application/json")
             );
 
-            // Use admin endpoint to create user with auto-confirm
+            // Use regular signup endpoint
             Request request = new Request.Builder()
-                    .url(supabaseConfig.getSupabaseUrl() + "/auth/v1/admin/users")
-                    .addHeader("apikey", supabaseConfig.getSupabaseServiceRoleKey())
-                    .addHeader("Authorization", "Bearer " + supabaseConfig.getSupabaseServiceRoleKey())
+                    .url(supabaseConfig.getSupabaseUrl() + "/auth/v1/signup")
+                    .addHeader("apikey", supabaseConfig.getSupabaseAnonKey())
                     .addHeader("Content-Type", "application/json")
                     .post(body)
                     .build();
 
-            String userId = null;
             try (Response response = httpClient.newCall(request).execute()) {
                 String responseBody = response.body() != null ? response.body().string() : "";
-                System.out.println("Supabase admin signup response: " + responseBody);
+                System.out.println("Supabase signup response: " + responseBody);
                 
                 if (!response.isSuccessful()) {
-                    System.err.println("Admin signup failed: " + responseBody);
+                    System.err.println("Signup failed: " + responseBody);
                     
                     if (responseBody.contains("already registered") || responseBody.contains("already exists")) {
                         throw new IllegalArgumentException("Email already registered");
@@ -85,49 +81,28 @@ public class SupabaseAuthService {
                 }
 
                 @SuppressWarnings("unchecked")
-                Map<String, Object> userData = objectMapper.readValue(responseBody, Map.class);
-                userId = (String) userData.get("id");
+                Map<String, Object> responseData = objectMapper.readValue(responseBody, Map.class);
                 
-                // Create user profile in database (email not verified yet)
-                User user = new User();
-                user.setId(userId);
-                user.setName(name);
-                user.setEmail(email.toLowerCase());
-                user.setRole("STUDENT");
-                user.setEmailVerified(false); // Will be true after OTP verification
-                user.setPasswordHash("");
-                user.setAssignedOfficeIds(null); // JSON field must be null, not empty string
-                user.setBadges(null); // JSON field must be null, not empty string
+                @SuppressWarnings("unchecked")
+                Map<String, Object> userData = (Map<String, Object>) responseData.get("user");
                 
-                userRepository.save(user);
-                System.out.println("✓ User created: " + email + " (ID: " + userId + ")");
-            }
-
-            // Step 2: Send OTP code via Supabase OTP API
-            Map<String, Object> otpData = new HashMap<>();
-            otpData.put("email", email);
-            otpData.put("create_user", false); // User already exists
-
-            String otpJson = objectMapper.writeValueAsString(otpData);
-            RequestBody otpBody = RequestBody.create(otpJson, MediaType.parse("application/json"));
-
-            Request otpRequest = new Request.Builder()
-                    .url(supabaseConfig.getSupabaseUrl() + "/auth/v1/otp")
-                    .addHeader("apikey", supabaseConfig.getSupabaseAnonKey())
-                    .addHeader("Content-Type", "application/json")
-                    .post(otpBody)
-                    .build();
-
-            try (Response otpResponse = httpClient.newCall(otpRequest).execute()) {
-                String otpResponseBody = otpResponse.body() != null ? otpResponse.body().string() : "";
-                System.out.println("OTP send response: " + otpResponseBody);
-                
-                if (!otpResponse.isSuccessful()) {
-                    System.err.println("Failed to send OTP: " + otpResponseBody);
-                    throw new IOException("Failed to send OTP code");
+                if (userData != null && userData.get("id") != null) {
+                    String userId = (String) userData.get("id");
+                    
+                    // Create user profile in database
+                    User user = new User();
+                    user.setId(userId);
+                    user.setName(name);
+                    user.setEmail(email.toLowerCase());
+                    user.setRole("STUDENT");
+                    user.setEmailVerified(true); // Mark as verified since confirmation is disabled
+                    user.setPasswordHash("");
+                    user.setAssignedOfficeIds(null);
+                    user.setBadges(null);
+                    
+                    userRepository.save(user);
+                    System.out.println("✓ User registered: " + email + " (ID: " + userId + ")");
                 }
-                
-                System.out.println("✓ OTP code sent to: " + email);
             }
 
         } catch (IOException e) {
