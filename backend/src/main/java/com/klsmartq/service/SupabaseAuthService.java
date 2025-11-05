@@ -37,14 +37,19 @@ public class SupabaseAuthService {
     }
 
     /**
-     * Student self-registration: creates Supabase auth user and profile
+     * Student self-registration: creates Supabase auth user with OTP verification
      */
     public void registerStudent(String name, String email, String password) {
         try {
-            // Prepare signup request
+            // Prepare signup request with email OTP
             Map<String, Object> signUpData = new HashMap<>();
             signUpData.put("email", email);
             signUpData.put("password", password);
+            
+            // Add user metadata (name will be stored in profile)
+            Map<String, Object> userMetadata = new HashMap<>();
+            userMetadata.put("name", name);
+            signUpData.put("user_metadata", userMetadata);
 
             String json = objectMapper.writeValueAsString(signUpData);
             
@@ -53,7 +58,7 @@ public class SupabaseAuthService {
                 MediaType.parse("application/json")
             );
 
-            // Call Supabase Auth API
+            // Call Supabase Auth API - this will send OTP email
             Request request = new Request.Builder()
                     .url(supabaseConfig.getSupabaseUrl() + "/auth/v1/signup")
                     .addHeader("apikey", supabaseConfig.getSupabaseAnonKey())
@@ -67,33 +72,93 @@ public class SupabaseAuthService {
                     throw new IllegalStateException("Supabase signup failed: " + errorBody);
                 }
 
+                String responseBody = response.body().string();
                 @SuppressWarnings("unchecked")
-                Map<String, Object> responseData = objectMapper.readValue(
-                    response.body().string(), 
-                    Map.class
-                );
+                Map<String, Object> responseData = objectMapper.readValue(responseBody, Map.class);
                 
                 @SuppressWarnings("unchecked")
                 Map<String, Object> userData = (Map<String, Object>) responseData.get("user");
+                
+                if (userData == null || userData.get("id") == null) {
+                    System.err.println("Supabase response: " + responseBody);
+                    throw new IllegalStateException("Failed to create user - no user ID returned");
+                }
+                
                 String supabaseUserId = (String) userData.get("id");
 
                 // Create profile in our database
                 User user = new User();
-                user.setId(supabaseUserId); // Use Supabase auth ID
+                user.setId(supabaseUserId);
                 user.setName(name);
                 user.setEmail(email.toLowerCase());
                 user.setRole("STUDENT");
-                user.setEmailVerified(false); // Will be true after email verification
-                user.setPasswordHash(""); // Password managed by Supabase
+                user.setEmailVerified(false);
+                user.setPasswordHash("");
                 userRepository.save(user);
 
                 System.out.println("✓ Student registered: " + email + " (Supabase ID: " + supabaseUserId + ")");
-                System.out.println("✓ Verification email sent by Supabase");
+                System.out.println("✓ OTP verification email sent by Supabase");
             }
 
         } catch (IOException e) {
             System.err.println("✗ Failed to register student: " + e.getMessage());
             throw new IllegalStateException("Registration failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Verify OTP code sent to email
+     */
+    public void verifyOtp(String email, String token) {
+        try {
+            Map<String, Object> verifyData = new HashMap<>();
+            verifyData.put("email", email);
+            verifyData.put("token", token);
+            verifyData.put("type", "signup"); // or "email_change", "recovery"
+
+            String json = objectMapper.writeValueAsString(verifyData);
+            
+            RequestBody body = RequestBody.create(
+                json, 
+                MediaType.parse("application/json")
+            );
+
+            Request request = new Request.Builder()
+                    .url(supabaseConfig.getSupabaseUrl() + "/auth/v1/verify")
+                    .addHeader("apikey", supabaseConfig.getSupabaseAnonKey())
+                    .addHeader("Content-Type", "application/json")
+                    .post(body)
+                    .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    String errorBody = response.body() != null ? response.body().string() : "Invalid code";
+                    throw new IllegalArgumentException("OTP verification failed: " + errorBody);
+                }
+
+                String responseBody = response.body().string();
+                @SuppressWarnings("unchecked")
+                Map<String, Object> responseData = objectMapper.readValue(responseBody, Map.class);
+                
+                @SuppressWarnings("unchecked")
+                Map<String, Object> userData = (Map<String, Object>) responseData.get("user");
+                
+                if (userData != null && userData.get("id") != null) {
+                    String userId = (String) userData.get("id");
+                    
+                    // Update email verification status in database
+                    userRepository.findById(userId).ifPresent(user -> {
+                        user.setEmailVerified(true);
+                        userRepository.save(user);
+                    });
+                    
+                    System.out.println("✓ OTP verified for: " + email);
+                }
+            }
+
+        } catch (IOException e) {
+            System.err.println("✗ OTP verification failed: " + e.getMessage());
+            throw new IllegalStateException("OTP verification failed: " + e.getMessage());
         }
     }
 

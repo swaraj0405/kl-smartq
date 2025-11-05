@@ -18,7 +18,7 @@ public class AuthController {
     }
 
     /**
-     * Register student - Supabase sends verification email automatically
+     * Step 1: Register student - Supabase sends OTP code to email
      */
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest r) {
@@ -26,7 +26,7 @@ public class AuthController {
         try {
             supabaseAuthService.registerStudent(r.getName(), r.getEmail(), r.getPassword());
             return ResponseEntity.ok().body(java.util.Map.of(
-                "message", "Registration successful! Please check your email for verification link."
+                "message", "Registration successful! Please check your email for OTP code."
             ));
         } catch (Exception e) {
             System.err.println("✗ Registration failed: " + e.getMessage());
@@ -35,7 +35,27 @@ public class AuthController {
     }
 
     /**
-     * Login - checks Supabase auth and email verification
+     * Step 2: Verify OTP code from email
+     */
+    @PostMapping("/verify-otp")
+    public ResponseEntity<?> verifyOtp(@RequestBody java.util.Map<String,String> body) {
+        String email = body.get("email");
+        String token = body.get("token"); // OTP code from email
+        System.out.println("→ /verify-otp called for email: " + email);
+        
+        try {
+            supabaseAuthService.verifyOtp(email, token);
+            return ResponseEntity.ok().body(java.util.Map.of(
+                "message", "Email verified successfully! You can now login."
+            ));
+        } catch (Exception e) {
+            System.err.println("✗ OTP verification failed: " + e.getMessage());
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", "Invalid OTP code"));
+        }
+    }
+
+    /**
+     * Step 3: Login - checks Supabase auth and email verification
      */
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest req) {
@@ -50,7 +70,7 @@ public class AuthController {
         }
     }
 
-    // Legacy endpoints (can be removed after frontend update)
+    // Legacy endpoints for backward compatibility
     @PostMapping("/send-verification-code")
     public ResponseEntity<?> sendCode(@RequestBody RegisterRequest r) {
         return register(r);
@@ -58,9 +78,11 @@ public class AuthController {
 
     @PostMapping("/verify-code")
     public ResponseEntity<?> verifyCode(@RequestBody java.util.Map<String,String> body) {
-        return ResponseEntity.ok().body(java.util.Map.of(
-            "message", "Verification is now handled via email link sent by Supabase"
-        ));
+        // Map old "code" parameter to new "token" parameter
+        if (body.containsKey("code") && !body.containsKey("token")) {
+            body.put("token", body.get("code"));
+        }
+        return verifyOtp(body);
     }
 
     @PostMapping("/complete-registration")
