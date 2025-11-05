@@ -222,34 +222,57 @@ public class SupabaseAuthService {
                     .build();
 
             try (Response response = httpClient.newCall(request).execute()) {
+                String responseBody = response.body() != null ? response.body().string() : "";
+                
+                System.out.println("Login status: " + response.code());
+                System.out.println("Login response: " + responseBody);
+                
                 if (!response.isSuccessful()) {
-                    throw new IllegalArgumentException("Invalid credentials");
+                    throw new IllegalArgumentException("Invalid email or password");
                 }
 
                 @SuppressWarnings("unchecked")
-                Map<String, Object> responseData = objectMapper.readValue(
-                    response.body().string(), 
-                    Map.class
-                );
+                Map<String, Object> responseData = objectMapper.readValue(responseBody, Map.class);
                 
                 @SuppressWarnings("unchecked")
                 Map<String, Object> userData = (Map<String, Object>) responseData.get("user");
+                
+                if (userData == null || userData.get("id") == null) {
+                    throw new IllegalArgumentException("Invalid credentials");
+                }
+                
                 String supabaseUserId = (String) userData.get("id");
                 String emailConfirmedAt = (String) userData.get("email_confirmed_at");
                 boolean emailVerified = emailConfirmedAt != null;
 
-                // Get user profile from database
-                User user = userRepository.findById(supabaseUserId)
-                        .orElseThrow(() -> new IllegalArgumentException("User profile not found"));
-
-                // Update email verification status
-                if (emailVerified && !user.isEmailVerified()) {
-                    user.setEmailVerified(true);
-                    userRepository.save(user);
+                if (!emailVerified) {
+                    throw new IllegalStateException("Email not verified. Please verify your email first.");
                 }
 
-                if (!emailVerified) {
-                    throw new IllegalStateException("Email not verified. Please check your email.");
+                // Get or create user profile from database
+                User user = userRepository.findById(supabaseUserId).orElseGet(() -> {
+                    // User verified in Supabase but profile not in our DB - create it now
+                    System.out.println("⚠️ User verified in Supabase but missing in DB - creating profile for: " + email);
+                    
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> userMetadata = (Map<String, Object>) userData.get("user_metadata");
+                    String name = userMetadata != null ? (String) userMetadata.get("name") : "Student";
+                    
+                    User newUser = new User();
+                    newUser.setId(supabaseUserId);
+                    newUser.setName(name);
+                    newUser.setEmail(email.toLowerCase());
+                    newUser.setRole("STUDENT");
+                    newUser.setEmailVerified(true);
+                    newUser.setPasswordHash("");
+                    
+                    return userRepository.save(newUser);
+                });
+
+                // Update email verification status if needed
+                if (!user.isEmailVerified()) {
+                    user.setEmailVerified(true);
+                    userRepository.save(user);
                 }
 
                 // Generate our JWT token
