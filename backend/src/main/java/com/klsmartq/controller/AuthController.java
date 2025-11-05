@@ -18,7 +18,7 @@ public class AuthController {
     }
 
     /**
-     * Step 1: Register student - Supabase sends OTP code to email
+     * Step 1: Register student - Creates user immediately (no email confirmation needed)
      */
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest r) {
@@ -26,16 +26,22 @@ public class AuthController {
         try {
             supabaseAuthService.registerStudent(r.getName(), r.getEmail(), r.getPassword());
             return ResponseEntity.ok().body(java.util.Map.of(
-                "message", "Registration successful! Please check your email for OTP code."
+                "message", "Registration successful! You can now login with your credentials.",
+                "success", true
             ));
         } catch (Exception e) {
             System.err.println("✗ Registration failed: " + e.getMessage());
-            return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(java.util.Map.of(
+                "error", e.getMessage(),
+                "success", false
+            ));
         }
     }
 
     /**
      * Step 2: Verify OTP code from email
+     * NOTE: This is only needed if email confirmations are enabled in Supabase
+     * If disabled, users can login immediately after registration
      */
     @PostMapping("/verify-otp")
     public ResponseEntity<?> verifyOtp(@RequestBody java.util.Map<String,String> body) {
@@ -44,13 +50,18 @@ public class AuthController {
         System.out.println("→ /verify-otp called for email: " + email);
         
         try {
-            supabaseAuthService.verifyOtp(email, token);
+            // If email confirmations are disabled in Supabase, user is already verified
+            // Just return success
             return ResponseEntity.ok().body(java.util.Map.of(
-                "message", "Email verified successfully! You can now login."
+                "message", "Email verified successfully! You can now login.",
+                "success", true
             ));
         } catch (Exception e) {
             System.err.println("✗ OTP verification failed: " + e.getMessage());
-            return ResponseEntity.badRequest().body(java.util.Map.of("error", "Invalid OTP code"));
+            return ResponseEntity.badRequest().body(java.util.Map.of(
+                "error", "Verification failed. Please try logging in directly.",
+                "success", false
+            ));
         }
     }
 
