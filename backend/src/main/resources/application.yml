@@ -3,12 +3,14 @@ server:
 
 spring:
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://db.xnmwuyrmhwydunpnxzom.supabase.co:5432/postgres?sslmode=require}
+    url: ${DATABASE_URL:jdbc:postgresql://db.xnmwuyrmhwydunpnxzom.supabase.co:5432/postgres?sslmode=require&connectTimeout=10}
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:Swaraj@0405}
+    driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
-      connection-timeout: 30000
+      connection-timeout: 60000
+      leak-detection-threshold: 60000
   jpa:
     hibernate:
       ddl-auto: update
