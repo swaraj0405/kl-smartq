@@ -59,8 +59,9 @@ public class EmailService {
                 System.out.println("✓ Verification code sent to " + toEmail + " via SendGrid HTTP API");
             } else {
                 System.err.println("✗ SendGrid API error: " + response.getStatusCode());
-                System.err.println("Response: " + response.getBody());
-                throw new IllegalStateException("Failed to send email via SendGrid API");
+                System.err.println("Response body: " + response.getBody());
+                System.err.println("Response headers: " + response.getHeaders());
+                throw new IllegalStateException("SendGrid API error " + response.getStatusCode() + ": " + response.getBody());
             }
         } catch (IOException ex) {
             System.err.println("✗ Failed to send email to " + toEmail + ": " + ex.getMessage());
