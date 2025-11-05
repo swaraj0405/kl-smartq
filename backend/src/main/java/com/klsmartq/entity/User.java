@@ -27,10 +27,10 @@ public class User {
     private int points = 0;
 
     @Column(columnDefinition = "json", nullable = true)
-    private String badges;
+    private String badges = null; // Default to null for JSON column
 
     @Column(name = "assigned_office_ids", columnDefinition = "json")
-    private String assignedOfficeIds;
+    private String assignedOfficeIds = null; // Default to null for JSON column
 
     @Column(name = "created_at")
     private Instant createdAt = Instant.now();
