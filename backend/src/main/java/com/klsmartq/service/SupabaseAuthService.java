@@ -37,76 +37,95 @@ public class SupabaseAuthService {
     }
 
     /**
-     * Student self-registration: creates Supabase auth user with OTP verification
+     * Student self-registration: creates Supabase auth user then sends OTP separately
+     * Step 1: Create user with auto-confirm using admin API
+     * Step 2: Send OTP code via /auth/v1/otp endpoint
      */
     public void registerStudent(String name, String email, String password) {
         try {
-            // First, create a temporary user record in our database
-            // We'll get the actual Supabase ID after OTP verification
+            // Step 1: Create user with auto-confirm (using service role key)
+            Map<String, Object> signupData = new HashMap<>();
+            signupData.put("email", email);
+            signupData.put("password", password);
+            signupData.put("email_confirm", true); // Auto-confirm the email
             
-            // Prepare signup request
-            Map<String, Object> signUpData = new HashMap<>();
-            signUpData.put("email", email);
-            signUpData.put("password", password);
-            
-            // Add user metadata
-            Map<String, Object> userMetadata = new HashMap<>();
-            userMetadata.put("name", name);
-            signUpData.put("user_metadata", userMetadata);
+            // Store name in user metadata
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("name", name);
+            signupData.put("user_metadata", metadata);
 
-            String json = objectMapper.writeValueAsString(signUpData);
+            String json = objectMapper.writeValueAsString(signupData);
             
             RequestBody body = RequestBody.create(
                 json, 
                 MediaType.parse("application/json")
             );
 
-            // Call Supabase Auth API
+            // Use admin endpoint to create user with auto-confirm
             Request request = new Request.Builder()
-                    .url(supabaseConfig.getSupabaseUrl() + "/auth/v1/signup")
-                    .addHeader("apikey", supabaseConfig.getSupabaseAnonKey())
+                    .url(supabaseConfig.getSupabaseUrl() + "/auth/v1/admin/users")
+                    .addHeader("apikey", supabaseConfig.getSupabaseServiceRoleKey())
+                    .addHeader("Authorization", "Bearer " + supabaseConfig.getSupabaseServiceRoleKey())
                     .addHeader("Content-Type", "application/json")
                     .post(body)
                     .build();
 
+            String userId = null;
             try (Response response = httpClient.newCall(request).execute()) {
+                String responseBody = response.body() != null ? response.body().string() : "";
+                System.out.println("Supabase admin signup response: " + responseBody);
+                
                 if (!response.isSuccessful()) {
-                    String errorBody = response.body() != null ? response.body().string() : "No error details";
-                    throw new IllegalStateException("Supabase signup failed: " + errorBody);
-                }
-
-                String responseBody = response.body().string();
-                System.out.println("Supabase signup response: " + responseBody);
-                
-                @SuppressWarnings("unchecked")
-                Map<String, Object> responseData = objectMapper.readValue(responseBody, Map.class);
-                
-                // When email confirmation is required, Supabase may not return user data immediately
-                // The user will be created after OTP verification
-                @SuppressWarnings("unchecked")
-                Map<String, Object> userData = (Map<String, Object>) responseData.get("user");
-                
-                if (userData != null && userData.get("id") != null) {
-                    String supabaseUserId = (String) userData.get("id");
-
-                    // Create profile in our database
-                    User user = new User();
-                    user.setId(supabaseUserId);
-                    user.setName(name);
-                    user.setEmail(email.toLowerCase());
-                    user.setRole("STUDENT");
-                    user.setEmailVerified(false);
-                    user.setPasswordHash("");
-                    userRepository.save(user);
+                    System.err.println("Admin signup failed: " + responseBody);
                     
-                    System.out.println("✓ Student registered: " + email + " (Supabase ID: " + supabaseUserId + ")");
-                } else {
-                    // User will be created in database after OTP verification
-                    // Store temporary registration data
-                    System.out.println("✓ Registration initiated for: " + email + " (awaiting email confirmation)");
+                    if (responseBody.contains("already registered") || responseBody.contains("already exists")) {
+                        throw new IllegalArgumentException("Email already registered");
+                    }
+                    throw new IllegalStateException("Registration failed: " + responseBody);
+                }
+
+                @SuppressWarnings("unchecked")
+                Map<String, Object> userData = objectMapper.readValue(responseBody, Map.class);
+                userId = (String) userData.get("id");
+                
+                // Create user profile in database (email not verified yet)
+                User user = new User();
+                user.setId(userId);
+                user.setName(name);
+                user.setEmail(email.toLowerCase());
+                user.setRole("STUDENT");
+                user.setEmailVerified(false); // Will be true after OTP verification
+                user.setPasswordHash("");
+                
+                userRepository.save(user);
+                System.out.println("✓ User created: " + email + " (ID: " + userId + ")");
+            }
+
+            // Step 2: Send OTP code via Supabase OTP API
+            Map<String, Object> otpData = new HashMap<>();
+            otpData.put("email", email);
+            otpData.put("create_user", false); // User already exists
+
+            String otpJson = objectMapper.writeValueAsString(otpData);
+            RequestBody otpBody = RequestBody.create(otpJson, MediaType.parse("application/json"));
+
+            Request otpRequest = new Request.Builder()
+                    .url(supabaseConfig.getSupabaseUrl() + "/auth/v1/otp")
+                    .addHeader("apikey", supabaseConfig.getSupabaseAnonKey())
+                    .addHeader("Content-Type", "application/json")
+                    .post(otpBody)
+                    .build();
+
+            try (Response otpResponse = httpClient.newCall(otpRequest).execute()) {
+                String otpResponseBody = otpResponse.body() != null ? otpResponse.body().string() : "";
+                System.out.println("OTP send response: " + otpResponseBody);
+                
+                if (!otpResponse.isSuccessful()) {
+                    System.err.println("Failed to send OTP: " + otpResponseBody);
+                    throw new IOException("Failed to send OTP code");
                 }
                 
-                System.out.println("✓ Verification email sent by Supabase");
+                System.out.println("✓ OTP code sent to: " + email);
             }
 
         } catch (IOException e) {
