@@ -18,6 +18,17 @@ public class AuthController {
     }
 
     /**
+     * Health check endpoint
+     */
+    @GetMapping("/health")
+    public ResponseEntity<?> health() {
+        return ResponseEntity.ok().body(java.util.Map.of(
+            "status", "UP",
+            "timestamp", System.currentTimeMillis()
+        ));
+    }
+
+    /**
      * Step 1: Register student - Creates user immediately (no email confirmation needed)
      */
     @PostMapping("/register")
@@ -29,10 +40,18 @@ public class AuthController {
                 "message", "Registration successful! You can now login with your credentials.",
                 "success", true
             ));
-        } catch (Exception e) {
-            System.err.println("✗ Registration failed: " + e.getMessage());
+        } catch (IllegalArgumentException e) {
+            System.err.println("✗ Registration failed (bad request): " + e.getMessage());
             return ResponseEntity.badRequest().body(java.util.Map.of(
                 "error", e.getMessage(),
+                "success", false
+            ));
+        } catch (Exception e) {
+            System.err.println("✗ Registration failed (server error): " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(java.util.Map.of(
+                "error", "Registration failed. Please try again later.",
+                "details", e.getMessage(),
                 "success", false
             ));
         }
