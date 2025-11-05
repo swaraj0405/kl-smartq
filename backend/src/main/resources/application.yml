@@ -31,6 +31,11 @@ spring:
     password: ${MAIL_PASSWORD:bsxo htpy odbz zuhu}
     properties.mail.smtp.auth: true
     properties.mail.smtp.starttls.enable: true
+    properties.mail.smtp.ssl.trust: ${MAIL_HOST:smtp.gmail.com}
+    # Connection timeouts (ms) - safer defaults for cloud deployments
+    properties.mail.smtp.connectiontimeout: 10000
+    properties.mail.smtp.timeout: 10000
+    properties.mail.smtp.writetimeout: 10000
 
 jwt:
   secret: ${JWT_SECRET:dev-secret-kl-smartq}
